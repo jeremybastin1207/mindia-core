@@ -1,6 +1,8 @@
 package task
 
 import (
+	"fmt"
+
 	"github.com/jeremybastin1207/mindia-core/internal/media"
 	"github.com/jeremybastin1207/mindia-core/internal/plugin"
 )
@@ -16,10 +18,13 @@ func NewColorizeMediaTask(pluginManager *plugin.PluginManager) ColorizeMediaTask
 }
 
 func (t *ColorizeMediaTask) Colorize(path media.Path) (*media.Media, error) {
-	plugin, err := t.pluginManager.GetPlugin("colorize")
+	p, err := t.pluginManager.GetPlugin(plugin.ColorizePluginName)
 	if err != nil {
 		return nil, err
 	}
-	plugin.Execute(path)
-	return nil, nil
+	t2 := plugin.NewColorizeTask(path)
+	t3, err := p.Execute(&t2)
+	fmt.Println(t3)
+	t.pluginManager.GetTaskStorage().EnqueueTask(t3)
+	return nil, err
 }

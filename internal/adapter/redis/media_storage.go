@@ -28,7 +28,7 @@ type MediaStorage struct {
 func NewMediaStorage(redisPool *redigo.Pool) *MediaStorage {
 	rejsonHandler := rejson.NewReJSONHandler()
 	rejsonHandler.SetRedigoClient(redisPool.Get())
-	redisearchClient := redisearch.NewClientFromPool(redisPool, "media_idx")
+	redisearchClient := redisearch.NewClientFromPool(redisPool, "media_index")
 
 	s := MediaStorage{
 		rejsonHandler:    rejsonHandler,

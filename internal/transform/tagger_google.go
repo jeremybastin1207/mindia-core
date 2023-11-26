@@ -8,10 +8,7 @@ import (
 	"github.com/jeremybastin1207/mindia-core/internal/pipeline"
 )
 
-type GoogleTaggerConfig struct {
-}
-
-func NewGoogleTagger(c GoogleTaggerConfig) GoogleTagger {
+func NewGoogleTagger() GoogleTagger {
 	return GoogleTagger{}
 }
 
@@ -29,7 +26,7 @@ func (w *GoogleTagger) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, erro
 	}
 	defer client.Close()
 
-	image, err := vision.NewImageFromReader(ctx.Buffer.ReadAll())
+	image, err := vision.NewImageFromReader(ctx.Buffer.Reader())
 	if err != nil {
 		return ctx, err
 	}

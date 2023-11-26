@@ -3,7 +3,7 @@ package media
 import "time"
 
 type Body = *[]byte
-type ContentLength = int64
+type ContentLength = int
 type Metadata map[string]string
 
 type Media struct {

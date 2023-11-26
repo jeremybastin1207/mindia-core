@@ -14,7 +14,7 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(getMediaTask task.GetMediaTask,
-	apiKeyOperator task.ApiKeyTasks,
+	apiKeyOperator task.ApiKeyOperator,
 	namedTransformationOperator task.NamedTransformationOperator) {
 	/* 	rootCmd.AddCommand(NewGetMediaCommand(getMediaTask))
 	   	rootCmd.AddCommand(NewGetApikeyCommand(namedTransformationOperator))

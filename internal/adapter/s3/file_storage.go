@@ -32,7 +32,7 @@ func (s *FileStorage) Upload(in media.UploadInput) error {
 		Key:           in.Path.ToString(),
 		Body:          in.Body,
 		ContentType:   in.ContentType,
-		ContentLength: in.ContentLength,
+		ContentLength: int64(in.ContentLength),
 	})
 }
 
@@ -80,7 +80,7 @@ func (s *FileStorage) Get(p media.Path) (*media.FileInfo, error) {
 	return &media.FileInfo{
 		Path:          p,
 		ContentType:   obj.ContentType,
-		ContentLength: obj.ContentLength,
+		ContentLength: int(obj.ContentLength),
 	}, nil
 }
 
@@ -103,7 +103,7 @@ func (s *FileStorage) GetMultiple(p media.Path) ([]media.FileInfo, error) {
 		medias = append(medias, media.FileInfo{
 			Path:          media.NewPath("/" + obj.Key),
 			ContentType:   obj.ContentType,
-			ContentLength: obj.ContentLength,
+			ContentLength: int(obj.ContentLength),
 		})
 	}
 	return medias, nil

@@ -1,21 +1,25 @@
 package pipeline
 
-type GetterFunc = func(ctx PipelineCtx) (PipelineCtx, error)
+import (
+	"errors"
+)
 
-type SourceConfig struct {
-	Getter GetterFunc
-}
+type ReadFunc = func(ctx PipelineCtx) (PipelineCtx, error)
 
 type Source struct {
-	SourceConfig
+	read ReadFunc
 }
 
-func NewSource(config SourceConfig) Source {
+func NewSource(read ReadFunc) Source {
 	return Source{
-		SourceConfig: config,
+		read,
 	}
 }
 
-func (s *Source) Run(ctx PipelineCtx) (PipelineCtx, error) {
-	return s.Getter(ctx)
+func (s *Source) Execute(ctx PipelineCtx) (PipelineCtx, error) {
+	ctx, err := s.read(ctx)
+	if ctx.Buffer == nil {
+		return ctx, errors.New("source read function must return a buffer")
+	}
+	return ctx, err
 }

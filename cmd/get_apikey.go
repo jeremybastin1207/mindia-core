@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewApiKeyReaderCommand(aikeyOperator task.ApiKeyTasks) *cobra.Command {
+func NewApiKeyReaderCommand(aikeyOperator task.ApiKeyOperator) *cobra.Command {
 	return &cobra.Command{
 		Use:   "apikey list",
 		Short: "",

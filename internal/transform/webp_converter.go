@@ -20,19 +20,18 @@ func NewWebpConverter() WebpConverter {
 	return WebpConverter{}
 }
 
-func (c *WebpConverter) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+func (c *WebpConverter) Execute(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
 	var (
 		img image.Image
 		err error
 	)
-
 	if ctx.ContentType == string(media.ImageJpeg) || ctx.ContentType == string(media.ImageJpg) {
-		img, err = jpeg.Decode(ctx.Buffer.ReadAll())
+		img, err = jpeg.Decode(ctx.Buffer.Reader())
 		if err != nil {
 			return ctx, err
 		}
 	} else if ctx.ContentType == string(media.ImagePng) {
-		img, err = png.Decode(ctx.Buffer.ReadAll())
+		img, err = png.Decode(ctx.Buffer.Reader())
 		if err != nil {
 			return ctx, err
 		}
@@ -47,8 +46,8 @@ func (c *WebpConverter) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, err
 	if err != nil {
 		return ctx, err
 	}
-
-	ctx.Buffer.Body = buf.Bytes()
+	ctx.Buffer = pipeline.NewBuffer(bytes.NewReader(buf.Bytes()))
+	ctx.Buffer.ReadAll()
 	ctx.Path = ctx.Path.SetExtension(".webp")
 	ctx.ContentType = string(media.ImageWebp)
 

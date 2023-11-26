@@ -2,7 +2,7 @@ lint:
 	golangci-lint run
 
 run:
-	go run . --server
+	go run .
 
 build:
 	go build -o bin/mindia

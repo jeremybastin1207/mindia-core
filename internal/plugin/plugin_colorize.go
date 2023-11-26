@@ -2,23 +2,35 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"reflect"
 	"time"
 
-	mindiaerr "github.com/jeremybastin1207/mindia-core/internal/error"
 	"github.com/jeremybastin1207/mindia-core/internal/media"
 	"github.com/jeremybastin1207/mindia-core/internal/pipeline"
 	"github.com/jeremybastin1207/mindia-core/internal/scheduler"
+	"github.com/jeremybastin1207/mindia-core/pkg/utils"
 	"github.com/replicate/replicate-go"
 	"github.com/stretchr/objx"
 )
 
+const ColorizePluginName = "colorize"
 const version = "376c74a2c9eb442a2ff9391b84dc5b949cd4e80b4dc0565115be0a19b7df0ae6"
-const task_name = "colorize"
+const modelName = "Artistic"
+const renderFactor = 35
 
-type ColorizeTaskDetails struct {
+type colorizeTaskDetails struct {
 	Path         string `json:"path"`
 	PredictionId string `json:"prediction_id"`
+}
+
+func NewColorizeTask(path media.Path) scheduler.Task {
+	d := colorizeTaskDetails{
+		Path:         path.ToString(),
+		PredictionId: "",
+	}
+	return scheduler.NewTask(ColorizePluginName, d)
 }
 
 type ColorizePlugin struct {
@@ -29,7 +41,7 @@ type ColorizePlugin struct {
 func NewColorizePlugin(pluginManager *PluginManager) ColorizePlugin {
 	replicateClient, err := replicate.NewClient(replicate.WithTokenFromEnv())
 	if err != nil {
-		mindiaerr.ExitErrorf("unable to create replicate client", err)
+		utils.ExitErrorf("unable to create replicate client", err)
 	}
 
 	return ColorizePlugin{
@@ -39,115 +51,162 @@ func NewColorizePlugin(pluginManager *PluginManager) ColorizePlugin {
 }
 
 func (p *ColorizePlugin) Name() string {
-	return "colorize"
+	return ColorizePluginName
 }
 
-func (p *ColorizePlugin) Execute(path media.Path) error {
-	media, err := p.pluginManager.GetFileStorage().Get(path)
-	if err != nil {
-		return err
+func (p *ColorizePlugin) Execute(task *scheduler.Task) (*scheduler.Task, error) {
+	var d colorizeTaskDetails
+
+	if reflect.TypeOf(task.Details) == reflect.TypeOf(map[string]interface{}{}) {
+		d = colorizeTaskDetails{
+			Path:         objx.New(task.Details).Get("path").Str(),
+			PredictionId: objx.New(task.Details).Get("prediction_id").Str(),
+		}
+	} else {
+		d = task.Details.(colorizeTaskDetails)
 	}
 
-	input := replicate.PredictionInput{
-		"input_image":   "https://mindia-storage.ams3.digitaloceanspaces.com" + path.ToString(),
-		"model_name":    "Artistic",
-		"model_image":   media.Path.ToString(),
-		"render_factor": 35,
+	if d.Path == "" {
+		return nil, errors.New("path is required")
 	}
 
-	prediction, err := p.replicateClient.CreatePrediction(context.Background(), version, input, nil, false)
-	if err != nil {
-		return err
+	path := media.NewPath(d.Path)
+
+	if d.PredictionId == "" {
+		prediction, err := p.createPrediction(path)
+		if err != nil {
+			return nil, err
+		}
+		details := colorizeTaskDetails{
+			Path:         path.ToString(),
+			PredictionId: prediction.ID,
+		}
+		task.Details = details
+		task.Status = scheduler.Processing
+		task.EnqueuedAt = time.Now()
+	} else {
+		url, status, err := p.fetchPrediction(path, d.PredictionId)
+		if err != nil {
+			return nil, err
+		}
+		if *status == replicate.Succeeded {
+			err := p.savePicture(path, url)
+			return nil, err
+		}
+		task.Status = toTaskStatus(*status)
 	}
 
-	details := ColorizeTaskDetails{
-		Path:         media.Path.ToString(),
-		PredictionId: prediction.ID,
-	}
-
-	task := scheduler.NewTask(task_name, details)
-	task.Status = scheduler.Processing
-	task.EnqueuedAt = time.Now()
-	err = p.pluginManager.GetTaskStorage().Save(task)
-	if err != nil {
-		return err
-	}
-	return nil
+	return task, nil
 }
 
-func (p *ColorizePlugin) Hook(task scheduler.Task) error {
-	d := ColorizeTaskDetails{
-		Path:         objx.New(task.Details).Get("path").Str(),
-		PredictionId: objx.New(task.Details).Get("prediction_id").Str(),
-	}
-
-	prediction, err := p.replicateClient.GetPrediction(context.Background(), d.PredictionId)
+func (p *ColorizePlugin) savePicture(path media.Path, url string) error {
+	m, err := p.pluginManager.GetMediaStorage().Get(path)
 	if err != nil {
 		return err
 	}
 
-	switch prediction.Status {
-	case replicate.Succeeded, replicate.Failed, replicate.Canceled:
-		task.Status = scheduler.Finished
-	default:
-		return nil
-	}
+	source := pipeline.NewSource(func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return ctx, err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return ctx, err
+		}
+		defer resp.Body.Close()
 
-	m, err := p.pluginManager.GetMediaStorage().Get(media.NewPath(d.Path))
-	if err != nil {
-		task.Status = scheduler.Canceled
-	}
+		ctx.Path = m.Path
+		ctx.Buffer = pipeline.NewBuffer(resp.Body)
+		ctx.ContentType = m.ContentType
+		ctx.EmbeddedMetadata = m.EmbeddedMetadata
 
-	source := pipeline.NewSource(pipeline.SourceConfig{
-		Getter: func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
-			ctx.Path = media.NewPath(d.Path)
-
-			req, _ := http.NewRequest("GET", prediction.Output.(string), nil)
-			resp, _ := http.DefaultClient.Do(req)
-
-			ctx.Buffer = &pipeline.Buffer{
-				Reader: resp.Body,
-			}
-			ctx.ContentType = m.ContentType
-			return ctx, nil
-		},
+		return ctx, nil
 	})
 
-	cacheSinker := pipeline.NewSinker(pipeline.SinkerConfig{
-		Sinker: func(ctx pipeline.PipelineCtx) error {
-			ctx.Path = ctx.Path.AppendSuffix("colorize")
-
-			return p.pluginManager.GetCacheStorage().Upload(media.UploadInput{
-				Path:          ctx.Path,
-				Body:          ctx.Buffer.MergeReader(),
-				ContentType:   ctx.ContentType,
-				ContentLength: ctx.Buffer.Len(),
-			})
-		},
+	cacheSinker := pipeline.NewSinker(func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+		err := p.pluginManager.GetCacheStorage().Upload(media.UploadInput{
+			Path:          ctx.Path.AppendSuffix(ColorizePluginName),
+			Body:          ctx.Buffer.Reader(),
+			ContentType:   ctx.ContentType,
+			ContentLength: ctx.Buffer.Len(),
+		})
+		return ctx, err
 	})
 
-	pp := pipeline.NewPipeline(pipeline.PipelineConfig{
-		Source: &source,
-		Sinker: &cacheSinker,
-	})
-
-	result, err := pp.Execute()
+	steps, err := p.pluginManager.GetMediaOptimization().GetSteps(media.ImageJpeg)
 	if err != nil {
 		return err
 	}
 
-	m.DerivedMedias = append(m.DerivedMedias, media.DerivedMedia{
-		Path:          result.Path,
-		ContentType:   result.ContentType,
-		ContentLength: result.Buffer.Len(),
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-	})
+	pp := pipeline.NewPipeline(&source, &cacheSinker, steps)
+	_, err = pp.Execute()
+	if err != nil {
+		return err
+	}
+
+	derivedMedias, err := p.pluginManager.GetCacheStorage().GetMultiple(m.Path)
+	if err != nil {
+		return err
+	}
+	m.DerivedMedias = []media.DerivedMedia{}
+	for _, a := range derivedMedias {
+		m.DerivedMedias = append(m.DerivedMedias, media.DerivedMedia{
+			Path:          a.Path,
+			ContentType:   a.ContentType,
+			ContentLength: a.ContentLength,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+		})
+	}
 
 	err = p.pluginManager.GetMediaStorage().Save(m)
 	if err != nil {
 		return err
 	}
 
-	return p.pluginManager.taskStorage.Save(task)
+	return nil
+}
+
+func (p *ColorizePlugin) createPrediction(path media.Path) (*replicate.Prediction, error) {
+	media, err := p.pluginManager.GetFileStorage().Get(path)
+	if err != nil {
+		return nil, err
+	}
+
+	input := replicate.PredictionInput{
+		"input_image":   "https://mindia-storage.ams3.digitaloceanspaces.com" + path.ToString(),
+		"model_name":    modelName,
+		"model_image":   media.Path.ToString(),
+		"render_factor": renderFactor,
+	}
+
+	return p.replicateClient.CreatePrediction(context.Background(), version, input, nil, false)
+}
+
+func (p *ColorizePlugin) fetchPrediction(path media.Path, predictionId string) (string, *replicate.Status, error) {
+	prediction, err := p.replicateClient.GetPrediction(context.Background(), predictionId)
+	if err != nil {
+		return "", nil, err
+	}
+	if prediction.Output != nil {
+		predId := prediction.Output.(string)
+		return predId, &prediction.Status, nil
+	}
+	return "", &prediction.Status, nil
+}
+
+func toTaskStatus(s replicate.Status) scheduler.TaskStatus {
+	switch s {
+	case replicate.Starting, replicate.Processing:
+		return scheduler.Processing
+	case replicate.Failed, replicate.Succeeded:
+		return scheduler.Finished
+	default:
+		return scheduler.Canceled
+	}
+}
+
+func (p *ColorizePlugin) getTaskName(path media.Path) string {
+	return p.Name() + ":" + path.ToString()
 }

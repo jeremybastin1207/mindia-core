@@ -38,7 +38,7 @@ func NewUploadMediaTask(
 	}
 }
 
-func (u *UploadMediaTask) Upload(
+func (t *UploadMediaTask) Upload(
 	path string,
 	body io.Reader,
 	contentType string,
@@ -49,38 +49,30 @@ func (u *UploadMediaTask) Upload(
 		return nil, mindiaerr.New(mindiaerr.ErrCodeMimeTypeNotSupported)
 	}
 
-	source := pipeline.NewSource(pipeline.SourceConfig{
-		Getter: func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+	source := pipeline.NewSource(
+		func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
 			ctx.Path = media.NewPath(path)
-			ctx.Buffer = &pipeline.Buffer{
-				Reader: body,
-			}
+			ctx.Buffer = pipeline.NewBuffer(body)
+			ctx.Buffer.ReadAll()
 			ctx.ContentType = contentType
 			return ctx, nil
-		},
+		})
+
+	sinker := pipeline.NewSinker(func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+		err := t.fileStorage.Upload(media.UploadInput{
+			Path:          ctx.Path,
+			Body:          ctx.Buffer.Reader(),
+			ContentType:   ctx.ContentType,
+			ContentLength: ctx.Buffer.Len(),
+		})
+		return ctx, err
 	})
 
-	sinker := pipeline.NewSinker(pipeline.SinkerConfig{
-		Sinker: func(ctx pipeline.PipelineCtx) error {
-			err := u.fileStorage.Upload(media.UploadInput{
-				Path:          ctx.Path,
-				Body:          ctx.Buffer.MergeReader(),
-				ContentType:   ctx.ContentType,
-				ContentLength: ctx.Buffer.Len(),
-			})
-			return err
-		},
-	})
-
-	steps, err := u.mediaOptimization.GetSteps(contentType)
+	steps, err := t.mediaOptimization.GetSteps(contentType)
 	if err != nil {
 		return nil, err
 	}
-	p := pipeline.NewPipeline(pipeline.PipelineConfig{
-		Source: &source,
-		Sinker: &sinker,
-		Steps:  steps,
-	})
+	p := pipeline.NewPipeline(&source, &sinker, steps)
 
 	result, err := p.Execute()
 	if err != nil {
@@ -99,52 +91,46 @@ func (u *UploadMediaTask) Upload(
 
 	if len(transformations) > 0 {
 		for _, transformation := range transformations {
-			transformations, err := u.namedTransformationParser.Parse(transformation)
+			transformations, err := t.namedTransformationParser.Parse(transformation)
 			if err != nil {
 				return nil, err
 			}
-			trans, err := u.transformationParser.Parse(*transformations)
+			trans, err := t.transformationParser.Parse(*transformations)
 			if err != nil {
 				return nil, err
 			}
-			steps, err := u.transformationsBuilder.Build(trans)
+			steps, err := t.transformationsBuilder.Build(trans)
 			if err != nil {
 				return nil, err
 			}
 
-			source = pipeline.NewSource(pipeline.SourceConfig{
-				Getter: func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
-					ctx.Path = result.Path
-					ctx.Buffer = result.Buffer
-					ctx.ContentType = result.ContentType
-					ctx.EmbeddedMetadata = result.EmbeddedMetadata
-					return ctx, nil
-				},
+			source = pipeline.NewSource(func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+				ctx.Path = result.Path
+				ctx.Buffer = result.Buffer
+				ctx.ContentType = result.ContentType
+				ctx.EmbeddedMetadata = result.EmbeddedMetadata
+				ctx.Buffer.ReadAll()
+				return ctx, nil
 			})
 
-			cacheSinker := pipeline.NewSinker(pipeline.SinkerConfig{
-				Sinker: func(ctx pipeline.PipelineCtx) error {
-					return u.cacheStorage.Upload(media.UploadInput{
-						Path:          ctx.Path.AppendSuffix(*transformations),
-						Body:          ctx.Buffer.MergeReader(),
-						ContentType:   ctx.ContentType,
-						ContentLength: ctx.Buffer.Len(),
-					})
-				},
+			cacheSinker := pipeline.NewSinker(func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+				err := t.cacheStorage.Upload(media.UploadInput{
+					Path:          ctx.Path.AppendSuffix(*transformations),
+					Body:          ctx.Buffer.Reader(),
+					ContentType:   ctx.ContentType,
+					ContentLength: ctx.Buffer.Len(),
+				})
+				return ctx, err
 			})
 
-			p = pipeline.NewPipeline(pipeline.PipelineConfig{
-				Source: &source,
-				Sinker: &cacheSinker,
-				Steps:  steps,
-			})
+			p = pipeline.NewPipeline(&source, &cacheSinker, steps)
 			_, err = p.Execute()
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		derivedMedias, err := u.cacheStorage.GetMultiple(m.Path)
+		derivedMedias, err := t.cacheStorage.GetMultiple(m.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +145,7 @@ func (u *UploadMediaTask) Upload(
 		}
 	}
 
-	err = u.mediaStorage.Save(&m)
+	err = t.mediaStorage.Save(&m)
 	if err != nil {
 		return nil, err
 	}

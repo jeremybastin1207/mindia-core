@@ -90,38 +90,29 @@ func (t *DownloadMediaTask) Download(
 		return nil, nil, err
 	}
 
-	source := pipeline.NewSource(pipeline.SourceConfig{
-		Getter: func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+	source := pipeline.NewSource(
+		func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
 			downloadResult, err = t.fileStorage.Download(path)
 			if err != nil {
 				return ctx, err
 			}
 			ctx.Path = path
 			ctx.ContentType = downloadResult.ContentType
-			ctx.Buffer = &pipeline.Buffer{
-				Reader: downloadResult.Body,
-			}
+			ctx.Buffer = pipeline.NewBuffer(downloadResult.Body)
 			return ctx, nil
-		},
+		})
+
+	cacheSinker := pipeline.NewSinker(func(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+		err := t.cacheStorage.Upload(media.UploadInput{
+			Path:          ctx.Path.AppendSuffix(*parsedTransformations),
+			Body:          ctx.Buffer.Reader(),
+			ContentType:   ctx.ContentType,
+			ContentLength: ctx.Buffer.Len(),
+		})
+		return ctx, err
 	})
 
-	cacheSinker := pipeline.NewSinker(pipeline.SinkerConfig{
-		Sinker: func(ctx pipeline.PipelineCtx) error {
-			err := t.cacheStorage.Upload(media.UploadInput{
-				Path:          ctx.Path.AppendSuffix(*parsedTransformations),
-				Body:          ctx.Buffer.MergeReader(),
-				ContentType:   ctx.ContentType,
-				ContentLength: ctx.Buffer.Len(),
-			})
-			return err
-		},
-	})
-
-	p := pipeline.NewPipeline(pipeline.PipelineConfig{
-		Source: &source,
-		Sinker: &cacheSinker,
-		Steps:  steps,
-	})
+	p := pipeline.NewPipeline(&source, &cacheSinker, steps)
 
 	result, err := p.Execute()
 	if err != nil {
@@ -152,7 +143,7 @@ func (t *DownloadMediaTask) Download(
 	if err != nil {
 		return nil, nil, err
 	}
-	return io.NopCloser(result.Buffer.Reader), &result.ContentType, nil
+	return io.NopCloser(result.Buffer.Reader()), &result.ContentType, nil
 }
 
 func (d *DownloadMediaTask) DownloadMultiple(paths []media.Path) (media.Body, error) {

@@ -48,7 +48,7 @@ type ApiServer struct {
 	port          int
 	masterKey     string
 	apikeyStorage apikey.Storer
-	logger        *mindialog.Logger
+	logger        mindialog.Logger
 	tasks         Tasks
 }
 
@@ -57,7 +57,7 @@ func NewApiServer(
 	host string,
 	port int,
 	apikeyStorage apikey.Storer,
-	logger *mindialog.Logger,
+	logger mindialog.Logger,
 	tasks Tasks,
 ) ApiServer {
 	return ApiServer{
@@ -96,7 +96,6 @@ func (s *ApiServer) Serve() {
 
 	sr = apir.PathPrefix("/task").Subrouter()
 	sr.Use(apiKeyMiddleware(s.apikeyStorage, s.masterKey))
-	sr.Methods("GET", "OPTIONS").HandlerFunc(apiHandler(s.handleReadTasks))
 
 	sr = apir.PathPrefix("/analytics").Subrouter()
 	sr.Use(apiKeyMiddleware(s.apikeyStorage, s.masterKey))
@@ -264,14 +263,6 @@ func (s *ApiServer) handleDeleteKey(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 	return writeMessage(w, "successfully deleted apikey")
-}
-
-func (s *ApiServer) handleReadTasks(w http.ResponseWriter, r *http.Request) error {
-	tasks, err := s.tasks.TaskOperator.GetAll()
-	if err != nil {
-		return err
-	}
-	return writeJSON(w, encodeJSON(w, tasks))
 }
 
 func (s *ApiServer) handleReadSpaceUsage(w http.ResponseWriter, r *http.Request) error {

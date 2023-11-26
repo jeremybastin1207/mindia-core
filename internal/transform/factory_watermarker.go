@@ -31,19 +31,19 @@ func (f *WatermarkerFactory) Build(args map[string]string) (*Watermarker, error)
 		return &Watermarker{}, errors.New("failed to parse anchor")
 	}
 
-	wm := NewWatermarker(WatermarkerConfig{
-		OverlaySinker: func() (media.Body, error) {
+	wm := NewWatermarker(
+		types.Size{
+			Width:  int32(w),
+			Height: int32(h),
+		},
+		*a,
+		p,
+		func() (media.Body, error) {
 			// body, _, err := f.dataStorage.Download(media.NewPath(o))
 			// TODO return body, err
 			return nil, nil
 		},
-		Size: types.Size{
-			Width:  int32(w),
-			Height: int32(h),
-		},
-		Anchor:  *a,
-		Padding: p,
-	})
+	)
 
 	return &wm, nil
 }

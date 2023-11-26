@@ -126,7 +126,7 @@ func (s *FileStorage) Get(p media.Path) (*media.FileInfo, error) {
 	return &media.FileInfo{
 		Path:          p,
 		ContentType:   contentType,
-		ContentLength: stat.Size(),
+		ContentLength: int(stat.Size()),
 	}, nil
 }
 

@@ -14,18 +14,18 @@ func NewMediaOptimization() *MediaOptimization {
 	return &MediaOptimization{}
 }
 
-func (o *MediaOptimization) GetSteps(contentType media.ContentType) ([]pipeline.Step, error) {
+func (o *MediaOptimization) GetSteps(contentType media.ContentType) ([]pipeline.PipelineStep, error) {
 	switch contentType {
 	case media.ImageJpeg, media.ImagePng:
 		exifReader := NewExifReader()
 		webpConverter := NewWebpConverter()
-		return []pipeline.Step{
+		return []pipeline.PipelineStep{
 			&exifReader,
 			&webpConverter,
 		}, nil
 	case media.VideoMp4:
-		return []pipeline.Step{}, nil
+		return []pipeline.PipelineStep{}, nil
 	default:
-		return []pipeline.Step{}, errors.New("content-type not supported")
+		return []pipeline.PipelineStep{}, errors.New("content-type not supported")
 	}
 }

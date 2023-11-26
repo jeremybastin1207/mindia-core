@@ -28,24 +28,17 @@ type Watermarker struct {
 	overlaySinker OverlaySinkerFunc
 }
 
-type WatermarkerConfig struct {
-	Size          types.Size
-	Anchor        types.Anchor
-	Padding       int
-	OverlaySinker OverlaySinkerFunc
-}
-
-func NewWatermarker(c WatermarkerConfig) Watermarker {
+func NewWatermarker(size types.Size, anchor types.Anchor, padding int, overlaySinker OverlaySinkerFunc) Watermarker {
 	return Watermarker{
-		size:          c.Size,
-		anchor:        c.Anchor,
-		padding:       c.Padding,
-		overlaySinker: c.OverlaySinker,
+		size,
+		anchor,
+		padding,
+		overlaySinker,
 	}
 }
 
-func (w *Watermarker) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
-	dst, err := webpbin.Decode(ctx.Buffer.ReadAll())
+func (w *Watermarker) Execute(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+	dst, err := webpbin.Decode(ctx.Buffer.Reader())
 	if err != nil {
 		return ctx, err
 	}
@@ -78,12 +71,9 @@ func (w *Watermarker) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error
 
 	dst = imaging.Overlay(dst, overlay, image.Pt(int(pos.X), int(pos.Y)), 1)
 
-	err = webpbin.Encode(bufio.NewWriter(ctx.Buffer.ReadAll()), dst)
-	if err != nil {
-		return ctx, err
-	}
+	err = webpbin.Encode(bufio.NewWriter(bytes.NewBuffer(ctx.Buffer.Bytes())), dst)
 
-	return ctx, nil
+	return ctx, err
 }
 
 func getWatermarkPosition(anchor types.Anchor, dst types.Size, wk types.Size, padding int32) types.Position {

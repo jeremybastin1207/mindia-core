@@ -18,12 +18,12 @@ func NewBuilder(dataStorage media.FileStorer) Builder {
 	}
 }
 
-func (b *Builder) Build(ts []Transformation) ([]pipeline.Step, error) {
-	var transformers []pipeline.Step
+func (b *Builder) Build(ts []Transformation) ([]pipeline.PipelineStep, error) {
+	var transformers []pipeline.PipelineStep
 
 	for _, t := range ts {
 		var (
-			t2  pipeline.Step
+			t2  pipeline.PipelineStep
 			err error
 		)
 

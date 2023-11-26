@@ -35,5 +35,5 @@ func NewTask(name string, details interface{}) Task {
 }
 
 type TaskFunc interface {
-	Hook(task Task) error
+	Execute(task *Task) (*Task, error)
 }

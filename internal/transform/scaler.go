@@ -77,8 +77,8 @@ func NewScaler(opts ...ScalerOptions) Scaler {
 	}
 }
 
-func (r *Scaler) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
-	img, err := webpbin.Decode(ctx.Buffer.ReadAll())
+func (r *Scaler) Execute(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+	img, err := webpbin.Decode(ctx.Buffer.Reader())
 	if err != nil {
 		return ctx, err
 	}
@@ -107,7 +107,7 @@ func (r *Scaler) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
 		return ctx, err
 	}
 
-	ctx.Buffer.Body = buf.Bytes()
+	ctx.Buffer = pipeline.NewBuffer(bytes.NewReader(buf.Bytes()))
 	ctx.Path = ctx.Path.SetExtension(".webp")
 	ctx.ContentType = string(media.ImageWebp)
 

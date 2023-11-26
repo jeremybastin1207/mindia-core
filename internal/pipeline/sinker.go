@@ -1,22 +1,17 @@
 package pipeline
 
-type SinkFunc = func(PipelineCtx) error
+type SinkFunc = func(PipelineCtx) (PipelineCtx, error)
 
 type Sinker struct {
-	sinker SinkFunc
+	sink SinkFunc
 }
 
-type SinkerConfig struct {
-	Sinker SinkFunc
-}
-
-func NewSinker(c SinkerConfig) Sinker {
+func NewSinker(sink SinkFunc) Sinker {
 	return Sinker{
-		sinker: c.Sinker,
+		sink,
 	}
 }
 
-func (s *Sinker) Run(ctx PipelineCtx) (PipelineCtx, error) {
-	err := s.sinker(ctx)
-	return ctx, err
+func (s *Sinker) Execute(ctx PipelineCtx) (PipelineCtx, error) {
+	return s.sink(ctx)
 }

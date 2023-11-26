@@ -6,14 +6,16 @@ import (
 )
 
 type Logger struct {
+	debug    *log.Logger
 	info     *log.Logger
 	warning  *log.Logger
 	err      *log.Logger
 	critical *log.Logger
 }
 
-func New() *Logger {
-	return &Logger{
+func New() Logger {
+	return Logger{
+		debug:    log.New(os.Stdout, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile),
 		info:     log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile),
 		warning:  log.New(os.Stdout, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile),
 		err:      log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile),
@@ -23,6 +25,10 @@ func New() *Logger {
 
 func (l *Logger) GetErrorLogger() *log.Logger {
 	return l.err
+}
+
+func (l *Logger) Debug(msg string) {
+	l.debug.Printf(msg)
 }
 
 func (l *Logger) Info(msg string) {

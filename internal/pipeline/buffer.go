@@ -7,26 +7,43 @@ import (
 )
 
 type Buffer struct {
-	Body     []byte
-	skipRead bool
-	Reader   io.Reader
+	bytes  []byte
+	reader io.Reader
 }
 
-func (c *Buffer) MergeReader() io.Reader {
-	c.ReadAll()
-	return io.MultiReader(bufio.NewReader(bytes.NewBuffer(c.Body)), c.Reader)
-}
-
-func (c *Buffer) ReadAll() *bytes.Buffer {
-	if !c.skipRead {
-		body, _ := io.ReadAll(c.Reader)
-		c.Body = body
-		c.skipRead = true
+func NewBuffer(reader io.Reader) *Buffer {
+	return &Buffer{
+		bytes:  []byte{},
+		reader: reader,
 	}
-	return bytes.NewBuffer(c.Body)
 }
 
-func (c *Buffer) Len() int64 {
+func (c *Buffer) Reader() io.Reader {
 	c.ReadAll()
-	return int64(len(c.Body))
+	return bufio.NewReader(bytes.NewBuffer(c.bytes))
+}
+
+func (c *Buffer) ReadAll() error {
+	bytes, err := io.ReadAll(c.reader)
+	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
+		return err
+	}
+	if len(bytes) == 0 {
+		return nil
+	}
+	c.bytes = bytes
+	return nil
+}
+
+func (c *Buffer) Bytes() []byte {
+	c.ReadAll()
+	return c.bytes
+}
+
+func (c *Buffer) Len() int {
+	c.ReadAll()
+	return len(c.bytes)
 }

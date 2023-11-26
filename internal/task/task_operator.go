@@ -11,7 +11,3 @@ func NewTaskOperator(taskStorage scheduler.Storer) TaskOperator {
 		storer: taskStorage,
 	}
 }
-
-func (o *TaskOperator) GetAll() ([]scheduler.Task, error) {
-	return o.storer.GetAll()
-}

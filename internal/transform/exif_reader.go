@@ -16,16 +16,13 @@ type ExifReader struct {
 
 func NewExifReader() ExifReader {
 	exif.RegisterParsers(mknote.All...)
-
 	return ExifReader{}
 }
 
-func (r *ExifReader) Run(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
-	var (
-		metadata = media.Metadata{}
-	)
+func (r *ExifReader) Execute(ctx pipeline.PipelineCtx) (pipeline.PipelineCtx, error) {
+	var metadata = media.Metadata{}
 
-	x, err := exif.Decode(ctx.Buffer.ReadAll())
+	x, err := exif.Decode(ctx.Buffer.Reader())
 	if err != nil {
 		return ctx, nil
 	}

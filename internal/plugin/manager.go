@@ -8,16 +8,15 @@ import (
 
 type Plugin interface {
 	Name() string
-	Execute(path media.Path) error
-	Hook(task scheduler.Task) error
+	Execute(task *scheduler.Task) (*scheduler.Task, error)
 }
 
 type PluginManager struct {
 	fileStorage       media.FileStorer
 	cacheStorage      media.FileStorer
 	mediaStorage      media.Storer
-	mediaOptimization *transform.MediaOptimization
 	taskStorage       scheduler.Storer
+	mediaOptimization *transform.MediaOptimization
 	plugins           map[string]Plugin
 }
 
@@ -31,8 +30,8 @@ func NewPluginManager(
 		fileStorage,
 		cacheStorage,
 		mediaStorage,
-		transform.NewMediaOptimization(),
 		taskStorage,
+		transform.NewMediaOptimization(),
 		map[string]Plugin{},
 	}
 }
@@ -57,10 +56,10 @@ func (p *PluginManager) GetMediaStorage() media.Storer {
 	return p.mediaStorage
 }
 
-func (p *PluginManager) GetMediaOptimization() *transform.MediaOptimization {
-	return p.mediaOptimization
-}
-
 func (p *PluginManager) GetTaskStorage() scheduler.Storer {
 	return p.taskStorage
+}
+
+func (p *PluginManager) GetMediaOptimization() *transform.MediaOptimization {
+	return p.mediaOptimization
 }
